@@ -1,29 +1,32 @@
 # mysql-ha-mgr-proxysql-keepalived
 This database system provides highly available, scalable, reliable and secure MySQL cluster services. This system can automatically distribute load and automatically transfer failures. As long as most nodes in the cluster are not down, it can continue to work normally and provide services to the outside world.
 
-tips:
-xshell中安装上传和下载文件的工具：
-yum -y install lrzsz
+**tips:**
 
-上传文件用：“rz”（如果覆盖原文件用“rz -y”）
-下载文件用：“sz 文件名”
+> Install the tool for uploading and downloading files in xshell:
+> 
+> ```yum -y install lrzsz```
+> 
+> Upload files with command: 'rz' (if overwriting the original file, use 'rz -y')
+> 
+> Download file: 'sz file_name'
 
-### 配置MGR集群
+### Configure MGR cluster
 
-3台服务器全部安装好MySQL
-在3台服务器里全部配置/etc/hosts文件
+Install MySQL on all three servers
+Configure /etc/hosts files on all three servers
 
 ```
 10.2.18.24      VZDTHBI024
 10.2.18.25      VZDTHMI025
-10.2.18.22      VZDTHMI022
 10.2.18.27      VZWTDZI027
 ```
-同时确保/etc/hostname文件中的主机名和/etc/hosts中的主机名保持一致
+Also make sure the host name in the /etc/hostname file is consistent with the host name in /etc/hosts
 
 
-Node01服务器上操作
-修改node1服务器的/etc/my.cnf配置文件
+### Operation on Node01 server
+
+Modify the /etc/my.cnf configuration file of the node1 server
 
 ```
 [mysqld]
@@ -35,11 +38,11 @@ character_set_server=utf8mb4
 max_connections=2000
 wait_timeout=600
 interactive_timeout=600
-lower_case_table_names = 1 #表名不区分大小写
+lower_case_table_names = 1 #Table names are not case sensitive
 sql_mode = STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION
 log_timestamps=SYSTEM
-innodb_buffer_pool_size=4G#根据实际情况确定
-innodb_temp_data_file_path = ibtmp1:12M:autoextend:max:10G #指定innodb临时表空间文件上限值大小，防止某些SQL导致此文件暴涨，挤爆磁盘空间。
+innodb_buffer_pool_size=4G #Configure according to the specific memory size of the server
+innodb_temp_data_file_path = ibtmp1:12M:autoextend:max:10G #Specify the upper limit of the innodb temporary tablespace file size to prevent certain SQL statements from causing this file to explode and fill up the disk space.
 
 #GTID:
 server_id = 1
@@ -56,7 +59,7 @@ log-slave-updates = 1
 binlog_format = row
 expire_logs_days = 90
 
-slave-skip-errors = 1007,1008,1032,1050,1051,1054,1060,1061,1062,1068,1091,1146,1217 #忽略指定错误，防止导致集群崩溃。
+slave-skip-errors = 1007,1008,1032,1050,1051,1054,1060,1061,1062,1068,1091,1146,1217 #Ignore certain error codes to prevent cluster crashes.
 
 transaction_write_set_extraction=XXHASH64
 loose-group_replication_group_name="5db40c3c-180c-11e9-afbf-005056ac6820"
@@ -66,59 +69,63 @@ loose-group_replication_group_seeds= "10.2.18.23:33061,10.2.18.24:33061,10.2.18.
 loose-group_replication_bootstrap_group=off
 ```
 
-> 参数说明：
-> 如果在启动服务器时尚未加载组复制插件，则上述变量loose-使用 的前缀 group_replication指示服务器继续启动。
-> 
-> 配置 transaction_write_set_extraction
-> 
-> 指示服务器对于每个事务，它必须收集写集并使用XXHASH64散列算法将其编码为散列。从MySQL 8.0.2开始，此设置是默认设置，因此可以省略此行。
-> 
-> 配置 group_replication_group_name
-> 
-> 必须是有效的UUID。在二进制日志中为组复制事件设置GTID时，将在内部使用此UUID。使用SELECT UUID()生成一个UUID。
-> 
-> 配置 group_replication_start_on_boot
-> 
-> 指示插件在服务器启动时不自动启动操作。这在设置组复制时很重要，因为它确保您可以在手动启动插件之前配置服务器。
-> 
-> 配置成员后，可以设置 group_replication_start_on_boot 为on，以便在服务器引导时自动启动Group Replication。
-> 
-> 配置 group_replication_local_address
-> 
-> 告诉插件本机使用网络地址127.0.0.1和端口24901与组中的其他成员进行内部通信。
-> 
-> 重要
-> 
-> 组复制使用此地址进行使用XCom的内部成员到成员连接。此地址必须与用于SQL的主机名和端口不同，并且不得用于客户端应用程序。
-> 
-> 在运行组复制时，必须为组成员之间的内部通信保留它。
-> 
-> 配置的网络地址 group_replication_local_address
-> 
-> 必须可由所有组成员解析。例如，如果每个服务器实例位于具有固定网络地址的其他计算机上，则可以使用计算机的IP，例如10.0.0.1。
-> 
-> 如果使用主机名，则必须使用完全限定名称，并确保它可通过DNS，正确配置的/etc/hosts 文件或其他名称解析过程进行解析。
-> 
-> 建议的端口 group_replication_local_address 是33061.在本教程中，我们使用在一台计算机上运行的三个服务器实例，因此端口24901到24903用于内部通信网络地址。
-> 
-> 配置 group_replication_group_seeds
-> 
-> 设置组成员的主机名和端口，新成员使用它们建立与组的连接。这些成员称为种子成员。建立连接后，将列出组成员身份信息 performance_schema.replication_group_members。
-> 
-> 通常，group_replication_group_seeds 列表包含hostname:port每个组成员的列表 group_replication_local_address，但这不是强制性的，可以选择组成员的子集作为种子。
-> 
-> 重要，该hostname:port列在 group_replication_group_seeds 是种子构件的内部网络地址，由被配置 group_replication_local_address ，
-> 
-> 而不是SQL hostname:port用于客户端连接，并且例如在显示 performance_schema.replication_group_members 表中。
-> 
-> 多主模式添加以下两行：（单主模式则去掉下面两行配置）
-> loose-group_replication_single_primary_mode=off     
-> loose-group_replication_enforce_update_everywhere_checks=on  #组成员此值必须统一，要么全为on要么全为off
-> 
-> #IP地址白名单,默认只添加127.0.0.1,不会允许来自外部主机的连接,按需安全设置
+> Parameter Description:
+>
+> If the Group Replication plugin has not been loaded when the server is started, the prefix used by the above variable loose-group_replication instructs the server to proceed with startup.
+>
+> Configuring transaction_write_set_extraction
+>
+> Instructs the server that for each transaction, it must collect the write set and encode it into a hash using the XXHASH64 hashing algorithm. Starting with MySQL 8.0.2, this setting is the default, so this line can be omitted.
+>
+> Configuring group_replication_group_name
+>
+> Must be a valid UUID. This UUID will be used internally when setting the GTID for Group Replication events in the binary log. Generate a UUID using SELECT UUID().
+>
+> Configuring group_replication_start_on_boot
+>
+> Instructs the plugin to not automatically start the operation on server startup. This is important when setting up Group Replication because it ensures that you can configure the server before manually starting the plugin.
+>
+> After configuring the members, you can set group_replication_start_on_boot to on to automatically start Group Replication when the server boots.
+>
+> Configuring group_replication_local_address
+>
+> Tells the plugin to use the network address 127.0.0.1 and port 24901 for internal communication with other members in the group.
+>
+> Important
+>
+> Group Replication uses this address for internal member-to-member connections using XCom. This address must be different from the hostname and port used for SQL and must not be used for client applications.
+>
+> You must reserve it for internal communication between group members while running Group Replication.
+>
+> The network address configured with group_replication_local_address
+>
+> must be resolvable by all group members. For example, if each server instance is on a different machine with a fixed network address, you can use the machine's IP, such as 10.0.0.1.
+>
+> If you use a host name, you must use a fully qualified name and ensure that it is resolvable via DNS, a properly configured /etc/hosts file, or other name resolution process.
+>
+> The recommended port for group_replication_local_address is 33061. In this tutorial, we use three server instances running on one machine, so ports 24901 to 24903 are used for internal communication network addresses.
+>
+> Configuring group_replication_group_seeds
+>
+> Set the hostname and port of the group member, which new members use to establish a connection to the group. These members are called seed members. Once a connection is established, group membership information is listed in performance_schema.replication_group_members.
+>
+> Typically, the group_replication_group_seeds list contains a list of hostname:port for each group member in group_replication_local_address, but this is not mandatory and a subset of group members can be selected as seeds.
+>
+> Important, the hostname:port column in group_replication_group_seeds is the internal network address of the seed member, as configured by group_replication_local_address ,
+>
+> and not the SQL hostname:port used for client connections and shown for example in the performance_schema.replication_group_members table.
+>
+> Add the following two lines for multi-primary mode: (remove the following two lines for single-primary mode)
+>
+> loose-group_replication_single_primary_mode=off
+>
+> loose-group_replication_enforce_update_everywhere_checks=on #This value must be consistent for group members, either all on or all off
+>
+> #IP address whitelist, only 127.0.0.1 is added by default, connections from external hosts are not allowed, security settings on demand
+>
 > loose-group_replication_ip_whitelist = '127.0.0.1/8,192.168.202.0/24'
 
-重启MySQL服务
+reboot MySQL service
 
 ```
 [root@VZDTHMI023 init.d]# service mysql restart
@@ -126,7 +133,7 @@ Shutting down MySQL.. SUCCESS!
 Starting MySQL. SUCCESS!
 ```
 
-登录mysql进行相关设置操作
+Log in to mysql to perform related settings
 
 ```
 [root@VZDTHMI023 ~]# mysql -uroot -p
@@ -216,13 +223,13 @@ mysql> SHOW PLUGINS;
 +----------------------------+----------+--------------------+----------------------+---------+
 45 rows in set (0.00 sec)
 
-mysql> SET GLOBAL group_replication_bootstrap_group=ON;
+mysql> SET GLOBAL group_replication_bootstrap_group=ON;①
 Query OK, 0 rows affected (0.00 sec)
 
 mysql> START GROUP_REPLICATION;
 Query OK, 0 rows affected (2.04 sec)
 
-mysql> SET GLOBAL group_replication_bootstrap_group=OFF;
+mysql> SET GLOBAL group_replication_bootstrap_group=OFF;②
 Query OK, 0 rows affected (0.00 sec)
 
 mysql> SELECT * FROM performance_schema.replication_group_members;
@@ -234,15 +241,15 @@ mysql> SELECT * FROM performance_schema.replication_group_members;
 1 row in set (0.00 sec)
 ```
 
-要保证上面的group_replication_applier的状态为"ONLINE"才对！
+Make sure the status of the group_replication_applier above is "ONLINE"!
 
-注意：标绿的两条命令，是为了标示以后加入集群的服务器以这台服务器为基准，以后加入的就不需要设置。用于第一次搭建MGR或重建MGR的时候使用，只需要在集群内的其中一台开启。
+Note: Commands ① and ② are used to mark the servers that will be added to the cluster in the future as taking this server as the benchmark. Other servers do not need to be set. Used when setting up MGR for the first time or rebuilding MGR, it only needs to be enabled on one of the servers in the cluster.
 
-Node02服务器上操作
+### Operation on Node2 server
 
-修改node2服务器的/etc/my.cnf配置文件
+Modify the /etc/my.cnf configuration file of the node2 server
 
-与node01相比，配置文件只有标亮的项目不同。
+Compared with node1, the configuration file only has the asterisked items that are different.
 
 ```
 [mysqld]
@@ -254,13 +261,13 @@ character_set_server=utf8mb4
 max_connections=2000
 wait_timeout=600
 interactive_timeout=600
-lower_case_table_names = 1 #表名不区分大小写
+lower_case_table_names = 1 #Table names are not case sensitive
 sql_mode = STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION
 log_timestamps=SYSTEM
-innodb_buffer_pool_size=4G#根据实际情况确定
+innodb_buffer_pool_size=4G #Configure according to the specific memory size of the server
 
 #GTID:
-server_id = 2
+server_id = 2 *
 gtid_mode = on
 enforce_gtid_consistency = on
 
@@ -277,12 +284,12 @@ expire_logs_days = 90
 transaction_write_set_extraction=XXHASH64
 loose-group_replication_group_name="5db40c3c-180c-11e9-afbf-005056ac6820"
 loose-group_replication_start_on_boot=off
-loose-group_replication_local_address= "10.2.18.24:33061"
+loose-group_replication_local_address= "10.2.18.24:33061" *
 loose-group_replication_group_seeds= "10.2.18.23:33061,10.2.18.24:33061,10.2.18.25:33061"
 loose-group_replication_bootstrap_group=off
 ```
 
-重启MySQL服务
+reboot MySQL service
 
 ```
 [root@VZDTHBI024 ~]# service mysql restart
@@ -290,7 +297,7 @@ Shutting down MySQL.. SUCCESS!
 Starting MySQL. SUCCESS!
 ```
 
-登录node02服务器进行操作
+### Log in to the node2 server to operate
 
 ```
 [root@VZDTHBI024 ~]# mysql -uroot -p
@@ -393,11 +400,12 @@ mysql> SELECT * FROM performance_schema.replication_group_members;
 2 rows in set (0.00 sec)
 ```
 
-Node03服务器上操作
+### Operations on Node3 server
 
-修改node3服务器的/etc/my.cnf配置文件
+Modify the /etc/my.cnf configuration file of the node3 server
 
-与node01相比，配置文件只有标亮的项目不同。
+Compared with node1, the configuration file only has the asterisked items that are different.
+
 
 ```
 [mysqld]
@@ -415,7 +423,7 @@ log_timestamps=SYSTEM
 innodb_buffer_pool_size=4G#根据实际情况确定
 
 #GTID:
-server_id = 3
+server_id = 3 *
 gtid_mode = on
 enforce_gtid_consistency = on
 
@@ -432,12 +440,12 @@ expire_logs_days = 90
 transaction_write_set_extraction=XXHASH64
 loose-group_replication_group_name="5db40c3c-180c-11e9-afbf-005056ac6820"
 loose-group_replication_start_on_boot=off
-loose-group_replication_local_address= "10.2.18.25:33061"
+loose-group_replication_local_address= "10.2.18.25:33061" *
 loose-group_replication_group_seeds= "10.2.18.23:33061,10.2.18.24:33061,10.2.18.25:33061"
 loose-group_replication_bootstrap_group=off
 ```
 
-重启MySQL服务
+reboot MySQL service
 
 ```
 [root@VZDTHBI024 ~]# service mysql restart
@@ -445,7 +453,7 @@ Shutting down MySQL.. SUCCESS!
 Starting MySQL. SUCCESS!
 ```
 
-登录node03服务器进行操作
+Log in to the node3 server to operate
 
 ```
 [root@VZDTHBI024 ~]# mysql -uroot -p
@@ -549,7 +557,7 @@ mysql> SELECT * FROM performance_schema.replication_group_members;
 3 rows in set (0.00 sec)
 ```
 
-至此，mgr集群已经配置完成。
+At this point, the MGR cluster has been configured.
 
 ### 配置ProxySQL服务
 
