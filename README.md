@@ -1,6 +1,9 @@
 # mysql-ha-mgr-proxysql-keepalived
 This database system provides highly available, scalable, reliable and secure MySQL cluster services. This system can automatically distribute load and automatically transfer failures. As long as most nodes in the cluster are not down, it can continue to work normally and provide services to the outside world.
 
+**System architecture diagram**
+![image](https://github.com/user-attachments/assets/f5cb3ce7-1bd7-4e0b-9f8a-4b4c33bbd0cd)
+
 **tips:**
 
 > Install the tool for uploading and downloading files in xshell:
